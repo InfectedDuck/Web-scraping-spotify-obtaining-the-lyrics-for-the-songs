@@ -9,40 +9,17 @@ from googleapiclient.discovery import build
 import yt_dlp
 import os
 import logging
-
-# Spotify API credentials
-client_id = '0e6355ff7ebe4b6b969c321b508358e0'
-client_secret = '11eabb27eecd4941bdf326717b9fb7bb'
-
-# YouTube API credentials
-youtube_api_key = 'AIzaSyA8KhPnTIzFGkk2qjeRIgoWgrXY_bxvL7A'
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.slider import Slider
+from kivy.uix.popup import Popup
 
 # Set up logging
 logging.basicConfig(filename='error.log', level=logging.ERROR,
                     format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Encode credentials
-encoded_credentials = base64.b64encode(f'{client_id}:{client_secret}'.encode()).decode()
-
-# Obtain access token
-auth_url = 'https://accounts.spotify.com/api/token'
-auth_data = {
-    'grant_type': 'client_credentials'
-}
-auth_headers = {
-    'Authorization': f'Basic {encoded_credentials}'
-}
-response = requests.post(auth_url, data=auth_data, headers=auth_headers)
-access_token = response.json().get('access_token')
-
-# Fetch playlist tracks
-playlist_id = '4geijLsFwxshTAku5IBVqs'
-playlist_url = f'https://api.spotify.com/v1/playlists/{playlist_id}/tracks'
-headers = {
-    'Authorization': f'Bearer {access_token}'
-}
-response = requests.get(playlist_url, headers=headers)
-tracks = response.json().get('items')
 
 # Set up SQLAlchemy
 DATABASE_URL = 'sqlite:///songs.db'
@@ -67,7 +44,7 @@ def insert_songs_and_export_csv(tracks, csv_file='songs.csv'):
     session = SessionLocal()
     song_list = []
 
-    for item in tracks[:5]:  # Limit to the first 5 songs
+    for item in tracks:  # Process all songs
         track = item.get('track')
         song_name = track.get('name')
         song_artist = ', '.join(artist.get('name') for artist in track.get('artists'))
@@ -114,14 +91,27 @@ def insert_songs_and_export_csv(tracks, csv_file='songs.csv'):
     # Return list of tuples (title, author) for YouTube search
     return [(song['Title'], song['Author']) for song in song_list]
 
+# Fetch playlist tracks with pagination
+def fetch_spotify_tracks(sp_playlist_id, headers):
+    tracks = []
+    url = f'https://api.spotify.com/v1/playlists/{sp_playlist_id}/tracks'
+    
+    while url:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        tracks.extend(data.get('items', []))
+        url = data.get('next')  # Spotify provides the next page URL, if available
+
+    return tracks
+
 # Search YouTube for the given titles and download the videos
-def search_and_download_youtube_videos(titles_and_authors, download_folder='videos'):
+def search_and_download_youtube_videos(titles_and_authors, youtube_api_key, num_videos, download_folder='videos'):
     youtube = build('youtube', 'v3', developerKey=youtube_api_key)
     
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
 
-    for title, author in titles_and_authors:
+    for title, author in titles_and_authors[:num_videos]:  # Limit to num_videos
         search_query = f"{title} {author}"
         try:
             # Search for the video on YouTube
@@ -160,6 +150,83 @@ def search_and_download_youtube_videos(titles_and_authors, download_folder='vide
         except Exception as e:
             logging.error(f"An error occurred for {title}: {e}")
 
-# Call the functions
-titles_and_authors = insert_songs_and_export_csv(tracks)
-search_and_download_youtube_videos(titles_and_authors)
+# Kivy Application
+class MusicApp(App):
+    def build(self):
+        self.title = 'Music Playlist Processor'
+        layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        
+        # Input fields
+        self.sp_playlist_id = TextInput(hint_text='Spotify Playlist ID')
+        self.sp_client_id = TextInput(hint_text='Spotify Client ID')
+        self.sp_client_secret = TextInput(hint_text='Spotify Client Secret')
+        self.yt_api_key = TextInput(hint_text='YouTube API Key')
+        self.num_videos_slider = Slider(min=1, max=10, value=5, step=1)
+        self.num_videos_label = Label(text=f'Number of videos to download: {int(self.num_videos_slider.value)}')
+        
+        self.num_videos_slider.bind(value=self.update_video_label)
+
+        process_button = Button(text='Process Playlist')
+        process_button.bind(on_press=self.process_data)
+        
+        layout.add_widget(self.sp_playlist_id)
+        layout.add_widget(self.sp_client_id)
+        layout.add_widget(self.sp_client_secret)
+        layout.add_widget(self.yt_api_key)
+        layout.add_widget(self.num_videos_label)
+        layout.add_widget(self.num_videos_slider)
+        layout.add_widget(process_button)
+        
+        return layout
+
+    def update_video_label(self, instance, value):
+        self.num_videos_label.text = f'Number of videos to download: {int(value)}'
+
+    def process_data(self, instance):
+        sp_playlist_id = self.sp_playlist_id.text
+        sp_client_id = self.sp_client_id.text
+        sp_client_secret = self.sp_client_secret.text
+        youtube_api_key = self.yt_api_key.text
+        num_videos = int(self.num_videos_slider.value)
+
+        if not sp_playlist_id or not sp_client_id or not sp_client_secret or not youtube_api_key:
+            self.show_popup('Error', 'Please fill in all fields')
+            return
+
+        # Encode credentials
+        encoded_credentials = base64.b64encode(f'{sp_client_id}:{sp_client_secret}'.encode()).decode()
+
+        # Obtain access token
+        auth_url = 'https://accounts.spotify.com/api/token'
+        auth_data = {
+            'grant_type': 'client_credentials'
+        }
+        auth_headers = {
+            'Authorization': f'Basic {encoded_credentials}'
+        }
+        response = requests.post(auth_url, data=auth_data, headers=auth_headers)
+        access_token = response.json().get('access_token')
+
+        if not access_token:
+            self.show_popup('Error', 'Failed to retrieve Spotify access token')
+            return
+
+        # Fetch playlist tracks with pagination
+        headers = {'Authorization': f'Bearer {access_token}'}
+        tracks = fetch_spotify_tracks(sp_playlist_id, headers)
+
+        if not tracks:
+            self.show_popup('Error', 'No tracks found or error fetching playlist')
+            return
+
+        titles_and_authors = insert_songs_and_export_csv(tracks)
+        search_and_download_youtube_videos(titles_and_authors, youtube_api_key, num_videos=num_videos)
+
+        self.show_popup('Success', 'Data processed and videos downloaded successfully!')
+
+    def show_popup(self, title, message):
+        popup = Popup(title=title, content=Label(text=message), size_hint=(None, None), size=(400, 200))
+        popup.open()
+
+if __name__ == '__main__':
+    MusicApp().run()

@@ -1,1 +1,4 @@
 youtube api: AIzaSyA8KhPnTIzFGkk2qjeRIgoWgrXY_bxvL7A
+spotify client id: 0e6355ff7ebe4b6b969c321b508358e0
+spotify client secret: 11eabb27eecd4941bdf326717b9fb7bb
+playlist id: 4geijLsFwxshTAku5IBVqs
