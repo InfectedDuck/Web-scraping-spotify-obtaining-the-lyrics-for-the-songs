@@ -19,4 +19,6 @@ This project demonstrates my expertise in API integration, data management, and 
 Downloads last videos only
 ## Currently working on this project
 
-## After will write code to search the name to find the lyrics, however the main problem is that it is hard to find a site, where the lyrics of all songs will be placed, in some of them there are no japanese songs, while other do not have an english songs. 
+## Future Work
+The next step involves implementing functionality to search for song lyrics based on the song name. However, a key challenge is identifying a comprehensive source for lyrics. Some websites lack lyrics for Japanese songs, while others may not include English songs, making it difficult to find a single platform that provides lyrics for all languages and genres.
+
