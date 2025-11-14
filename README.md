@@ -21,5 +21,3 @@ Downloads last videos only
 
 ## Future Work
 The next step involves implementing functionality to search for song lyrics based on the song name. However, a key challenge is identifying a comprehensive source for lyrics. Some websites lack lyrics for Japanese songs, while others may not include English songs, making it difficult to find a single platform that provides lyrics for all languages and genres.
-
-
